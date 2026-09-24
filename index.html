@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BLE Serial Terminal</title>
+<meta name="theme-color" content="#07080c">
+<meta name="description" content="A serial terminal for Bluetooth Low Energy UART devices, in the browser.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237c83ff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 7 10 10-5 5V2l5 5L7 17'/%3E%3C/svg%3E">
+<style>
+:root {
+  color-scheme: dark;
+  --bg: #07080c; --surface: #0e1016; --raised: #161924; --border: #ffffff12; --border-hi: #ffffff24;
+  --fg: #e7e9ef; --muted: #8b91a1; --dim: #555b6b;
+  --accent: #7c83ff; --accent-2: #a78bfa; --glow: #7c83ff55;
+  --tx: #8fb4ff; --err: #ff6b7a; --on: #34d399; --busy: #fbbf24;
+  --mono: ui-monospace, "JetBrains Mono", "Cascadia Mono", "SF Mono", Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+html { background: var(--bg); }
+body {
+  background: radial-gradient(900px 420px at 50% -160px, #7c83ff26, transparent 70%);
+  color: var(--fg); font: 15px/1.45 Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  display: flex; flex-direction: column; height: 100dvh; max-width: 1100px; margin: 0 auto;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: #7c83ff55; }
+svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+button, input, select { font: inherit; color: inherit; }
+button {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 8px 14px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--raised); cursor: pointer;
+  transition: background .15s, border-color .15s, box-shadow .15s, transform .1s;
+}
+button:hover:not(:disabled) { border-color: var(--border-hi); background: #1c2030; }
+button:active:not(:disabled) { transform: scale(.97); }
+button:disabled { opacity: .4; cursor: default; }
+button.primary {
+  border-color: transparent; color: #fff; font-weight: 600;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 4px 18px var(--glow);
+}
+button.primary:hover:not(:disabled) { background: linear-gradient(135deg, #8b91ff, #b69cff); border-color: transparent; }
+button.primary:disabled { box-shadow: none; }
+button.ghost { min-height: 32px; padding: 6px 10px; border-color: transparent; background: transparent; color: var(--muted); font-size: 13px; border-radius: 9px; }
+button.ghost:hover:not(:disabled) { color: var(--fg); background: #ffffff0d; border-color: transparent; }
+
+header { display: flex; align-items: center; gap: 10px; padding: 14px 16px; }
+header h1 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
+header h1 svg.i { width: 32px; height: 32px; padding: 7px; border-radius: 10px; color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 4px 16px var(--glow); }
+#status {
+  margin-right: auto; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 12px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 13px;
+}
+#status span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--dim); flex: none; }
+#status[data-state=on] { color: var(--fg); }
+#status[data-state=on]::before { background: var(--on); box-shadow: 0 0 0 3px #34d39933, 0 0 10px var(--on); }
+#status[data-state=busy]::before { background: var(--busy); animation: pulse 1s infinite alternate; }
+@keyframes pulse { to { opacity: .3; } }
+#connect { min-width: 108px; }
+
+main { flex: 1; min-height: 0; padding: 0 16px; }
+.term {
+  height: 100%; display: flex; flex-direction: column; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 18px;
+  box-shadow: 0 20px 60px #0008, inset 0 1px #ffffff08;
+}
+.tools { display: flex; align-items: center; gap: 2px; padding: 8px 8px 8px 16px; border-bottom: 1px solid var(--border); }
+#count { margin-right: auto; color: var(--dim); font: 12px var(--mono); }
+#log { flex: 1; overflow-y: auto; padding: 12px 16px; font: 13px/1.6 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; scrollbar-color: #ffffff1f transparent; }
+#log:empty { display: grid; place-items: center; }
+#log:empty::before { content: "Press Connect and pick a device"; color: var(--dim); font: 14px system-ui, sans-serif; }
+#log div { display: grid; grid-template-columns: max-content 1fr; column-gap: 14px; }
+#log div::before { content: attr(data-t); color: var(--dim); }
+#log.nots div { display: block; }
+#log.nots div::before { content: none; }
+#log .tx { color: var(--tx); }
+#log .sys { color: var(--muted); }
+#log .err { color: var(--err); }
+
+#composer {
+  display: flex; gap: 6px; margin: 12px 16px 16px; padding: 5px 5px 5px 16px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 16px; transition: border-color .15s, box-shadow .15s;
+}
+#composer:focus-within { border-color: #7c83ff88; box-shadow: 0 0 0 4px #7c83ff1f; }
+#line { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font-family: var(--mono); font-size: 14px; }
+#line::placeholder { color: var(--dim); }
+#composer button { min-width: 44px; min-height: 44px; padding: 0; border-radius: 12px; }
+
+dialog {
+  width: min(420px, calc(100% - 32px)); padding: 22px; border: 1px solid var(--border-hi); border-radius: 20px;
+  background: var(--raised); color: var(--fg); box-shadow: 0 30px 80px #000a;
+}
+dialog::backdrop { background: #03040699; backdrop-filter: blur(6px); }
+dialog h2 { margin: 0 0 18px; font-size: 17px; font-weight: 650; }
+.field { display: grid; gap: 6px; margin-bottom: 14px; color: var(--muted); font-size: 13px; }
+.field small { color: var(--dim); }
+.field input, .field select {
+  padding: 11px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--fg); font-size: 15px; outline: 0;
+}
+.field input:focus, .field select:focus { border-color: #7c83ff88; box-shadow: 0 0 0 4px #7c83ff1f; }
+.field input::placeholder { color: var(--dim); }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.check { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-top: 1px solid var(--border); cursor: pointer; }
+.check input {
+  appearance: none; position: relative; width: 40px; height: 24px; margin: 0; border-radius: 999px;
+  background: #2a2f3d; cursor: pointer; transition: background .2s;
+}
+.check input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .2s; }
+.check input:checked { background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+.check input:checked::after { transform: translateX(16px); }
+.check input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+dialog .primary { width: 100%; margin-top: 14px; min-height: 46px; }
+
+#toast {
+  position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translate(-50%, 8px);
+  padding: 9px 16px; border: 1px solid var(--border-hi); border-radius: 999px; background: var(--raised); color: var(--fg);
+  font-size: 13px; box-shadow: 0 10px 30px #0009; opacity: 0; pointer-events: none; transition: .2s;
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+@media (max-width: 600px) {
+  body { font-size: 16px; }
+  header { padding: 10px 12px; gap: 8px; }
+  header h1 span, .tools .label { display: none; }
+  #connect { min-width: 0; }
+  main { padding: 0 8px; }
+  .term { border-radius: 14px; }
+  #log { font-size: 12.5px; padding: 10px 12px; }
+  #log div { column-gap: 10px; }
+  #composer { margin: 8px 8px 10px; }
+  #line { font-size: 16px; }
+  dialog { width: 100%; max-width: none; margin: auto 0 0; border-width: 1px 0 0; border-radius: 22px 22px 0 0; padding-bottom: calc(22px + env(safe-area-inset-bottom)); }
+}
+</style>
+</head>
+<body>
+<svg style="display:none">
+  <symbol id="i-bt" viewBox="0 0 24 24"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+</svg>
+
+<header>
+  <h1><svg class="i"><use href="#i-bt"/></svg><span>BLE Terminal</span></h1>
+  <div id="status"><span>Not connected</span></div>
+  <button id="menuBtn" title="Settings" aria-label="Settings"><svg class="i"><use href="#i-gear"/></svg></button>
+  <button id="connect" class="primary">Connect</button>
+</header>
+
+<main>
+  <div class="term">
+    <div class="tools">
+      <span id="count">0 lines</span>
+      <button class="ghost" id="copy" title="Copy all"><svg class="i"><use href="#i-copy"/></svg><span class="label">Copy all</span></button>
+      <button class="ghost" id="download" title="Download .txt"><svg class="i"><use href="#i-save"/></svg><span class="label">Download .txt</span></button>
+      <button class="ghost" id="clear" title="Clear"><svg class="i"><use href="#i-trash"/></svg><span class="label">Clear</span></button>
+    </div>
+    <div id="log"></div>
+  </div>
+</main>
+
+<form id="composer">
+  <input id="line" placeholder="Connect to send" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="send" disabled>
+  <button class="primary" id="send" aria-label="Send" disabled><svg class="i"><use href="#i-send"/></svg></button>
+</form>
+
+<dialog id="menu">
+  <form id="opts" method="dialog">
+    <h2>Settings</h2>
+    <label class="field">Service UUID
+      <input name="service" placeholder="Auto" autocomplete="off" spellcheck="false">
+      <small>Blank finds Nordic UART, HM-10 (FFE0), FFF0, Microchip, u-blox and GARRY. Used on the next connect.</small>
+    </label>
+    <div class="row">
+      <label class="field">Line end
+        <select name="eol"><option value="">None</option><option value="&#10;" selected>LF \n</option><option value="&#13;">CR \r</option><option value="&#13;&#10;">CR LF</option></select>
+      </label>
+      <label class="field">Prefix (hex)
+        <input name="prefix" placeholder="None" autocomplete="off" spellcheck="false">
+      </label>
+    </div>
+    <label class="check">Send as hex <input type="checkbox" name="hexSend"></label>
+    <label class="check">Show received as hex <input type="checkbox" name="hexView"></label>
+    <label class="check">Timestamps <input type="checkbox" name="time" checked></label>
+    <button class="primary">Done</button>
+  </form>
+</dialog>
+
+<div id="toast" role="status"></div>
+
+<script>
+// Tried in order, so a device with several gets its UART and not its OTA service.
+const SERVICES = [
+  '6e400001-b5a3-f393-e0a9-e50e24dcca9e', // Nordic UART
+  '6e401550-b5a3-f393-e0a9-e50e24dcca9e', // GARRY link, wants prefix 01
+  0xffe0,                                 // HM-10, HM-19, JDY, CC254x
+  0xfff0,                                 // many generic modules
+  '49535343-fe7d-4ae5-8fa9-9fafd205e455', // Microchip transparent UART
+  '2456e1b9-26e2-8f83-e744-f34f01e9d701', // u-blox serial port
+];
+const MARK = { rx: '<', tx: '>', sys: '#', err: '!' };
+
+const $ = id => document.getElementById(id);
+const opt = $('opts').elements, logEl = $('log'), line = $('line');
+const lines = [], history = [];  // ponytail: unbounded, fine for a session
+let device, tx, decoder, rxBuf = '', flushTimer, histAt = 0, queue = Promise.resolve(), toastTimer;
+
+// every named field in the menu, kept per browser
+const fields = [...opt].filter(e => e.name);
+const val = e => e.type === 'checkbox' ? 'checked' : 'value';
+try { const s = JSON.parse(localStorage.bleterm2); fields.forEach(e => e.name in s && (e[val(e)] = s[e.name])); } catch {}
+$('opts').onchange = () => {
+  logEl.classList.toggle('nots', !opt.time.checked);
+  try { localStorage.bleterm2 = JSON.stringify(Object.fromEntries(fields.map(e => [e.name, e[val(e)]]))); } catch {}
+};
+$('opts').onchange();
+
+const pad = (n, w = 2) => String(n).padStart(w, '0');
+const stamp = d => `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
+const toHex = b => Array.from(b, x => pad(x.toString(16))).join(' ');
+const toUuid = s => /^(0x)?[0-9a-f]{4}$/i.test(s) ? parseInt(s.slice(-4), 16) : s.toLowerCase();
+function parseHex(s) {
+  const h = s.replace(/0x|[\s,]/gi, '');
+  if (h.length % 2 || /[^0-9a-f]/i.test(h)) throw new Error(`not hex: ${s}`);
+  return Uint8Array.from(h.match(/../g) || [], x => parseInt(x, 16));
+}
+
+function toast(msg) {
+  $('toast').textContent = msg;
+  $('toast').classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => $('toast').classList.remove('show'), 1600);
+}
+
+function add(kind, text) {
+  const t = new Date(), atEnd = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
+  lines.push({ t, kind, text });
+  const row = document.createElement('div');
+  row.className = kind;
+  row.dataset.t = stamp(t);
+  row.textContent = kind === 'tx' ? '> ' + text : text;
+  logEl.append(row);
+  if (logEl.childElementCount > 5000) logEl.firstChild.remove();  // the screen only, export keeps all
+  if (atEnd) logEl.scrollTop = logEl.scrollHeight;  // follow unless the user scrolled up
+  $('count').textContent = `${lines.length} lines`;
+}
+
+const exportText = () => lines.map(l => (opt.time.checked ? stamp(l.t) + ' ' : '') + MARK[l.kind] + ' ' + l.text + '\n').join('');
+
+function flush() {
+  if (rxBuf) add('rx', rxBuf);
+  rxBuf = '';
+}
+
+function onData(e) {
+  const v = e.target.value, bytes = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+  if (opt.hexView.checked) return add('rx', toHex(bytes));
+  // control bytes other than line ends are dropped, so a framing byte like GARRY's 01 does not show
+  rxBuf += decoder.decode(bytes, { stream: true }).replace(/[\x00-\x09\x0b\x0c\x0e-\x1f\x7f]/g, '');
+  const parts = rxBuf.split(/\r?\n|\r/);
+  rxBuf = parts.pop();
+  parts.forEach(p => add('rx', p));
+  clearTimeout(flushTimer);
+  if (rxBuf) flushTimer = setTimeout(flush, 150);  // a prompt with no line end still shows
+}
+
+async function write(bytes) {
+  const long = tx.properties.write, size = long ? 512 : 20;
+  for (let i = 0; i < bytes.length; i += size) {
+    const chunk = bytes.slice(i, i + size);
+    await (long ? tx.writeValueWithResponse(chunk) : tx.writeValueWithoutResponse(chunk));
+  }
+}
+
+$('composer').onsubmit = e => {
+  e.preventDefault();
+  const text = line.value;
+  if (!tx || (!text && !opt.eol.value)) return;
+  let bytes;
+  try {
+    const body = opt.hexSend.checked ? parseHex(text) : new TextEncoder().encode(text + opt.eol.value);
+    bytes = new Uint8Array([...parseHex(opt.prefix.value), ...body]);
+  } catch (err) { return add('err', err.message); }
+  add('tx', opt.hexSend.checked ? toHex(bytes) : text);
+  if (text && history.at(-1) !== text) history.push(text);
+  histAt = history.length;
+  line.value = '';
+  queue = queue.then(() => write(bytes)).catch(err => add('err', `write failed: ${err.message}`));
+};
+
+line.onkeydown = e => {
+  const step = { ArrowUp: -1, ArrowDown: 1 }[e.key];
+  if (!step || !history.length) return;
+  e.preventDefault();
+  histAt = Math.max(0, Math.min(history.length, histAt + step));
+  line.value = history[histAt] ?? '';
+};
+
+function setStatus(state, text) {
+  $('status').dataset.state = state;
+  $('status').firstChild.textContent = text;
+  $('connect').textContent = state === 'off' ? 'Connect' : 'Disconnect';
+  $('connect').classList.toggle('primary', state === 'off');
+  line.disabled = $('send').disabled = state !== 'on' || !tx;
+  line.placeholder = line.disabled ? (state === 'on' ? 'Device has no write characteristic' : 'Connect to send') : 'Type a command, Enter to send';
+}
+
+async function findUart(server) {
+  const custom = opt.service.value.trim();
+  for (const uuid of custom ? [toUuid(custom)] : SERVICES) {
+    const service = await server.getPrimaryService(uuid).catch(() => null);
+    if (!service) continue;
+    const chars = await service.getCharacteristics();
+    const rx = chars.find(c => c.properties.notify || c.properties.indicate);
+    const wr = chars.find(c => c.properties.write || c.properties.writeWithoutResponse);
+    if (rx || wr) return { service, rx, wr };
+  }
+  throw new Error(custom ? `service ${custom} not found` : 'no known UART service. Set its UUID in Settings');
+}
+
+async function connect() {
+  if (device?.gatt.connected) return device.gatt.disconnect();
+  const custom = opt.service.value.trim();
+  try {
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: custom ? [BluetoothUUID.getService(toUuid(custom)), ...SERVICES] : SERVICES,
+    });
+  } catch (err) {
+    if (err.name !== 'NotFoundError') add('err', err.message);  // NotFoundError is the chooser cancelled
+    return;
+  }
+  const name = device.name || 'Unnamed device';
+  device.ongattserverdisconnected = () => { flush(); tx = null; add('sys', 'disconnected'); setStatus('off', 'Not connected'); };
+  setStatus('busy', `Connecting to ${name}`);
+  try {
+    const { service, rx, wr } = await findUart(await device.gatt.connect());
+    tx = wr;
+    decoder = new TextDecoder();
+    if (rx) {
+      rx.oncharacteristicvaluechanged = onData;
+      await rx.startNotifications();
+    }
+    add('sys', `connected to ${name}, service ${service.uuid}`);
+    setStatus('on', name);
+    line.focus();
+  } catch (err) {
+    add('err', err.message);
+    device.gatt.disconnect();
+    setStatus('off', 'Not connected');
+  }
+}
+
+$('connect').onclick = connect;
+$('menuBtn').onclick = () => $('menu').showModal();
+$('menu').onclick = e => e.target === $('menu') && $('menu').close();  // a tap on the backdrop closes it
+$('copy').onclick = () => navigator.clipboard.writeText(exportText())
+  .then(() => toast(`Copied ${lines.length} lines`), err => toast(`Copy failed: ${err.message}`));
+$('download').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([exportText()], { type: 'text/plain' }));
+  a.download = `ble-log-${new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-')}.txt`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+$('clear').onclick = () => { lines.length = 0; logEl.textContent = ''; $('count').textContent = '0 lines'; };
+
+if (!navigator.bluetooth) {
+  $('connect').disabled = true;
+  add('err', 'This browser has no Web Bluetooth. Use Chrome or Edge on desktop or Android, or Bluefy on iOS.');
+}
+</script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>BLE Serial Terminal</title>
 <meta name="theme-color" content="#07080c">
 <link rel="manifest" href="manifest.webmanifest">
@@ -23,11 +23,12 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
-html { background: var(--bg); }
+html { background: var(--bg); -webkit-text-size-adjust: 100%; text-size-adjust: 100%; overflow: hidden; overscroll-behavior: none; }
+body > * { min-width: 0; }
 body {
   background: radial-gradient(900px 420px at 50% -160px, #7c83ff26, transparent 70%);
   color: var(--fg); font: 15px/1.45 Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  display: flex; flex-direction: column; height: 100dvh; max-width: 1100px; margin: 0 auto;
+  display: flex; flex-direction: column; height: 100vh; height: 100dvh; width: 100%; max-width: 1100px; margin: 0 auto; overflow: hidden;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   -webkit-font-smoothing: antialiased;
 }
@@ -38,6 +39,7 @@ button {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 8px 14px;
   border: 1px solid var(--border); border-radius: 12px; background: var(--raised); cursor: pointer;
   transition: background .15s, border-color .15s, box-shadow .15s, transform .1s;
+  flex: none; touch-action: manipulation; -webkit-tap-highlight-color: transparent; white-space: nowrap;
 }
 button:hover:not(:disabled) { border-color: var(--border-hi); background: #1c2030; }
 button:active:not(:disabled) { transform: scale(.97); }
@@ -52,10 +54,10 @@ button.ghost { min-height: 32px; padding: 6px 10px; border-color: transparent; b
 button.ghost:hover:not(:disabled) { color: var(--fg); background: #ffffff0d; border-color: transparent; }
 
 header { display: flex; align-items: center; gap: 10px; padding: 14px 16px; }
-header h1 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
+header h1 { flex: none; display: flex; align-items: center; gap: 10px; margin: 0; font-size: 16px; font-weight: 650; letter-spacing: -.01em; }
 header h1 svg.i { width: 32px; height: 32px; padding: 7px; border-radius: 10px; color: #fff; background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 4px 16px var(--glow); }
 #status {
-  margin-right: auto; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 12px;
+  flex: 0 1 auto; margin-right: auto; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 12px;
   border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 13px;
 }
 #status span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -101,13 +103,14 @@ main { flex: 1; min-height: 0; padding: 0 16px; }
 #composer button { min-width: 44px; min-height: 44px; padding: 0; border-radius: 12px; }
 
 dialog {
-  width: min(420px, calc(100% - 32px)); padding: 22px; border: 1px solid var(--border-hi); border-radius: 20px;
+  width: min(420px, calc(100% - 32px)); max-height: 90dvh; overflow-y: auto; overscroll-behavior: contain; padding: 22px; border: 1px solid var(--border-hi); border-radius: 20px;
   background: var(--raised); color: var(--fg); box-shadow: 0 30px 80px #000a;
 }
 dialog::backdrop { background: #03040699; backdrop-filter: blur(6px); }
 dialog h2 { margin: 0 0 18px; font-size: 17px; font-weight: 650; }
 .field { display: grid; gap: 6px; margin-bottom: 14px; color: var(--muted); font-size: 13px; }
 .field small { color: var(--dim); }
+#install { width: 100%; margin-top: 14px; min-height: 46px; }
 .field input, .field select {
   padding: 11px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg); color: var(--fg); font-size: 15px; outline: 0;
 }
@@ -134,16 +137,34 @@ dialog .primary { width: 100%; margin-top: 14px; min-height: 46px; }
 
 @media (max-width: 600px) {
   body { font-size: 16px; }
-  header { padding: 10px 12px; gap: 8px; }
-  header h1 span, .tools .label, header .label { display: none; }
-  #connect { min-width: 0; }
+  header { padding: 8px 10px; gap: 6px; }
+  header h1 span, .tools .label { display: none; }
+  header button { min-height: 40px; }
+  #menuBtn { width: 40px; padding: 0; }
+  #connect { min-width: 0; padding: 0 14px; font-size: 14px; }
+  #status { padding: 5px 10px; font-size: 12.5px; }
   main { padding: 0 8px; }
   .term { border-radius: 14px; }
-  #log { font-size: 12.5px; padding: 10px 12px; }
-  #log div { column-gap: 10px; }
-  #composer { margin: 8px 8px 10px; }
-  #line { font-size: 16px; }
+  .tools { padding: 4px 4px 4px 12px; }
+  button.ghost { width: 40px; min-height: 36px; padding: 0; }
+  /* the time sits inline and small, so a line gets the full width */
+  #log { font-size: clamp(11.5px, 3.3vw, 13px); line-height: 1.5; padding: 8px 10px; }
+  #log div { display: block; padding: 1px 0; }
+  #log div::before { font-size: .82em; margin-right: 6px; }
+  #composer { margin: 8px; padding-left: 12px; }
+  #line { font-size: 16px; }  /* under 16px iOS zooms the page on focus */
+  #composer button { min-width: 40px; min-height: 40px; }
   dialog { width: 100%; max-width: none; margin: auto 0 0; border-width: 1px 0 0; border-radius: 22px 22px 0 0; padding-bottom: calc(22px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 360px) {
+  header h1 { display: none; }
+  #connect { padding: 0 10px; }
+}
+/* a phone on its side: every pixel of height goes to the log */
+@media (max-height: 500px) {
+  header { padding-top: 4px; padding-bottom: 4px; }
+  #composer { margin-top: 4px; margin-bottom: 4px; }
+  #log { padding-top: 6px; padding-bottom: 6px; }
 }
 </style>
 </head>
@@ -161,7 +182,6 @@ dialog .primary { width: 100%; margin-top: 14px; min-height: 46px; }
 <header>
   <h1><svg class="i"><use href="#i-bt"/></svg><span>BLE Terminal</span></h1>
   <div id="status"><span>Not connected</span></div>
-  <button id="install" title="Install as an app" hidden><svg class="i"><use href="#i-install"/></svg><span class="label">Install</span></button>
   <button id="menuBtn" title="Settings" aria-label="Settings"><svg class="i"><use href="#i-gear"/></svg></button>
   <button id="connect" data-state="off">Connect</button>
 </header>
@@ -201,6 +221,7 @@ dialog .primary { width: 100%; margin-top: 14px; min-height: 46px; }
     <label class="check">Send as hex <input type="checkbox" name="hexSend"></label>
     <label class="check">Show received as hex <input type="checkbox" name="hexView"></label>
     <label class="check">Timestamps <input type="checkbox" name="time" checked></label>
+    <button type="button" id="install" hidden><svg class="i"><use href="#i-install"/></svg>Install as an app</button>
     <button class="primary">Done</button>
   </form>
 </dialog>
@@ -323,7 +344,7 @@ function setStatus(state, text) {
   $('connect').dataset.state = state;
   $('connect').textContent = { off: 'Connect', busy: 'Cancel', on: 'Disconnect' }[state];
   line.disabled = $('send').disabled = state !== 'on' || !tx;
-  line.placeholder = line.disabled ? (state === 'on' ? 'Device has no write characteristic' : 'Connect to send') : 'Type a command, Enter to send';
+  line.placeholder = line.disabled ? (state === 'on' ? 'Device has no write characteristic' : 'Connect to send') : 'Type a command';
 }
 
 async function findUart(server) {

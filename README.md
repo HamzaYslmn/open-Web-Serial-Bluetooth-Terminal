@@ -18,7 +18,7 @@ Everything else is in **Settings** (the sliders button), and the defaults work f
 |---|---|
 | Service UUID | Blank is auto. Set it (`ffe0` or a full UUID) for a device the list does not know |
 | Line end | Added to every text line you send. LF by default |
-| Prefix (hex) | Bytes put in front of every write. GARRY boards want `01` |
+| Prefix (hex) | Bytes put in front of every write. Blank is auto: `01` on a GARRY board, nothing elsewhere |
 | Send as hex | The input is hex bytes, like `01 3f` |
 | Show received as hex | Received bytes as hex instead of text |
 | Timestamps | On screen and in the export |

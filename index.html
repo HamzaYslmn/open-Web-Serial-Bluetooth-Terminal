@@ -399,12 +399,31 @@ $('menuBtn').onclick = () => $('menu').showModal();
 $('menu').onclick = e => e.target === $('menu') && $('menu').close();  // a tap on the backdrop closes it
 $('copy').onclick = () => navigator.clipboard.writeText(exportText())
   .then(() => toast(`Copied ${lines.length} lines`), err => toast(`Copy failed: ${err.message}`));
-$('download').onclick = () => {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([exportText()], { type: 'text/plain' }));
-  a.download = `ble-log-${new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-')}.txt`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+$('download').onclick = async () => {
+  if (!lines.length) return toast('Nothing to save');
+  const name = `ble-log-${new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-')}.txt`;
+  const blob = new Blob([exportText()], { type: 'text/plain' });
+  try {
+    // a real save dialog where there is one (desktop Chrome and Edge, installed or not)
+    if (window.showSaveFilePicker) {
+      const handle = await showSaveFilePicker({ suggestedName: name, types: [{ description: 'Text', accept: { 'text/plain': ['.txt'] } }] });
+      const w = await handle.createWritable();
+      await w.write(blob);
+      await w.close();
+      return toast(`Saved ${lines.length} lines`);
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    // the download starts async, so revoking right away kills it in an installed app
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    toast(`Downloading ${name}`);
+  } catch (err) {
+    if (err.name !== 'AbortError') toast(`Save failed: ${err.message}`);
+  }
 };
 $('clear').onclick = () => { lines.length = 0; logEl.textContent = ''; $('count').textContent = '0 lines'; };
 

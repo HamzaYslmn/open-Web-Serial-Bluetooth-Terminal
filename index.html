@@ -274,14 +274,18 @@ function toast(msg) {
   toastTimer = setTimeout(() => $('toast').classList.remove('show'), 1600);
 }
 
-function add(kind, text) {
-  const t = new Date(), atEnd = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
+function row(kind, text, t) {
   lines.push({ t, kind, text });
-  const row = document.createElement('div');
-  row.className = kind;
-  row.dataset.t = stamp(t);
-  row.textContent = kind === 'tx' ? '> ' + text : text;
-  logEl.append(row);
+  const el = document.createElement('div');
+  el.className = kind;
+  el.dataset.t = stamp(t);
+  el.textContent = kind === 'tx' ? '> ' + text : text;
+  return el;
+}
+
+function add(kind, text) {
+  const atEnd = logEl.scrollHeight - logEl.scrollTop - logEl.clientHeight < 40;
+  logEl.append(row(kind, text, new Date()));
   if (logEl.childElementCount > 5000) logEl.firstChild.remove();  // the screen only, export keeps all
   if (atEnd) logEl.scrollTop = logEl.scrollHeight;  // follow unless the user scrolled up
   $('count').textContent = `${lines.length} lines`;
@@ -433,6 +437,16 @@ addEventListener('beforeinstallprompt', e => { e.preventDefault(); installPrompt
 addEventListener('appinstalled', () => { $('install').hidden = true; toast('Installed'); });
 $('install').onclick = () => { installPrompt?.prompt(); $('install').hidden = true; };
 navigator.serviceWorker?.register('sw.js');
+
+// a minimized app can be discarded and reloaded, so the log is saved on the way out
+const save = () => { try { localStorage.bletermLog = JSON.stringify(lines.slice(-5000)); } catch {} };
+addEventListener('visibilitychange', () => document.hidden && save());
+addEventListener('pagehide', save);
+try {
+  logEl.append(...JSON.parse(localStorage.bletermLog).map(l => row(l.kind, l.text, new Date(l.t))));
+  $('count').textContent = `${lines.length} lines`;
+  logEl.scrollTop = logEl.scrollHeight;
+} catch {}
 
 if (!navigator.bluetooth) {
   $('connect').disabled = true;
